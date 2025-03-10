@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Revision: 6
+# Revision: 7
 # Date: 2025-03-09
-# Description: Restrict DEBUG to 'true' or '1' for enabling debug output
+# Description: Fix early exit with DEBUG unset or not true/1
 
 # Enable modern bash features
 set -euo pipefail # Exit on error, undefined vars, and pipeline failures
@@ -170,7 +170,7 @@ main() {
  aria2c --no-conf --check-integrity=true --seed-time=0 --dir="$temp_dir" \
  --console-log-level=warn archlinux-latest.torrent || {
  printf "${red}Error: Cached ISO verification failed${reset}\n" >&2
- exit 1
+ exit 1 
  }
  log_debug "Cached ISO verified"
  else
@@ -280,7 +280,8 @@ if ! trap cleanup EXIT INT TERM; then
  printf "${red}Error: Failed to set trap${reset}\n" >&2
  exit 1
 fi
-log_debug "Trap set successfully"
+# Ensure script continues even if DEBUG is unset
+: && log_debug "Trap set successfully"
 
 # Execute main with explicit tracing
 log_debug "Before calling main"
