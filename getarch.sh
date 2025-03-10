@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Revision: 1
+# Revision: 3
 # Date: 2025-03-09
-# Description: Initial version with trap fix for early exit issue
+# Description: Fix aria2c to verify cached ISO without seeding
 
 # Enable modern bash features
 set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
@@ -139,6 +139,16 @@ main() {
     iso_path="${downloads_dir}/${iso_name}"
     cached_iso="${cache_dir}/${iso_name}"
 
+    local curl_opts=(-sL)
+    [[ -t 1 ]] && curl_opts+=(--progress-bar)
+    
+    log_debug "Fetching torrent file from $torrent_url"
+    curl "${curl_opts[@]}" "$torrent_url" -o archlinux-latest.torrent
+    log_debug "Fetching signature file"
+    curl "${curl_opts[@]}" "https://archlinux.org/iso/$version/$iso_name.sig" -o "$iso_name.sig"
+    log_debug "Fetching checksum file"
+    curl "${curl_opts[@]}" "https://archlinux.org/iso/$version/sha256sums.txt" -o sha256sums.txt
+
     log_debug "Checking for cached ISO at $cached_iso"
     if [[ -f "$cached_iso" ]]; then
         printf "${yellow}Found cached ISO at %s${reset}\n" "$cached_iso"
@@ -147,15 +157,15 @@ main() {
             exit 1
         }
         log_debug "Copied cached ISO to $temp_dir/$iso_name"
+        log_debug "Verifying cached ISO with aria2c"
+        aria2c --no-conf --check-integrity=true --seed-time=0 --dir="$temp_dir" \
+               --console-log-level=warn archlinux-latest.torrent || {
+            printf "${red}Error: Cached ISO verification failed${reset}\n" >&2
+            exit 1
+        }
+        log_debug "Cached ISO verified"
     else
         log_debug "No cached ISO found, proceeding with download"
-        local curl_opts=(-sL)
-        [[ -t 1 ]] && curl_opts+=(--progress-bar)
-        
-        curl "${curl_opts[@]}" "$torrent_url" -o archlinux-latest.torrent
-        curl "${curl_opts[@]}" "https://archlinux.org/iso/$version/$iso_name.sig" -o "$iso_name.sig"
-        curl "${curl_opts[@]}" "https://archlinux.org/iso/$version/sha256sums.txt" -o sha256sums.txt
-
         aria2c --seed-time=0 --max-upload-limit=1K --dir="$temp_dir" \
                --console-log-level=warn archlinux-latest.torrent
         log_debug "Download completed"
