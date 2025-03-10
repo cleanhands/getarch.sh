@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Revision: 4
+# Revision: 5
 # Date: 2025-03-09
-# Description: Fix empty USB drive detection on macOS
+# Description: Broaden macOS USB drive detection to include external drives
 
 # Enable modern bash features
 set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
@@ -56,11 +56,14 @@ check_commands() {
 list_usb_drives() {
     local drives=()
     if [[ "$(uname)" == "Darwin" ]]; then
-        # macOS: Use diskutil to find removable drives
+        # macOS: Include removable or external drives
         while IFS= read -r disk; do
-            # Ensure disk is not empty and is removable
-            if [[ -n "$disk" ]] && diskutil info "$disk" | grep -q "Removable Media:.*Yes"; then
-                drives+=("$disk")
+            if [[ -n "$disk" ]]; then
+                local disk_info
+                disk_info=$(diskutil info "$disk")
+                if echo "$disk_info" | grep -q "Removable Media:.*Yes" || echo "$disk_info" | grep -q "External:.*Yes"; then
+                    drives+=("$disk")
+                fi
             fi
         done < <(diskutil list | grep -oE 'disk[0-9]+' | sort -u)
     else
@@ -82,7 +85,7 @@ list_usb_drives() {
 get_drive_info() {
     local drive=$1
     if [[ "$(uname)" == "Darwin" ]]; then
-        diskutil info "$drive" | grep -E "Device Identifier|Device Node|Volume Name|Media Name|Total Size|Removable Media"
+        diskutil info "$drive" | grep -E "Device Identifier|Device Node|Volume Name|Media Name|Total Size|Removable Media|External"
     else
         lsblk -o NAME,SIZE,VENDOR,MODEL,TRAN "$drive" | tail -n +2
     fi
