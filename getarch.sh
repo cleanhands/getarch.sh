@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Revision: 9
+# Revision: 10
 # Date: 2025-03-09
-# Description: Standardized indentation to 4 spaces throughout the script
+# Description: Modified cleanup to prompt only if interactive and debug is on
 
 # Enable modern bash features
 set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
@@ -34,7 +34,7 @@ log_debug() {
 # Cleanup function
 cleanup() {
     local exit_code=$?
-    if [[ -t 0 ]]; then  # Only prompt if interactive terminal
+    if [[ -t 0 && ("${DEBUG:-}" == "true" || "${DEBUG:-}" == "1") ]]; then # Only prompt if interactive and debug is on
         printf "\nPress Enter to continue..." >&2
         read -r
     fi
