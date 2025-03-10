@@ -2,7 +2,8 @@
 
 # Enable modern bash features
 set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
-shopt -s inherit_errexit 2>/dev/null || true  # Inherit errexit in subshells (Bash 4.4+)
+# shopt -s inherit_errexit only works in Bash 4.4+, macOS has 3.2, so skip it safely
+shopt -s inherit_errexit 2>/dev/null || true
 
 # Define constants
 readonly download_page="https://archlinux.org/releng/releases/"
@@ -107,8 +108,11 @@ write_to_drive() {
 # Main function
 main() {
     log_debug "Starting main function"
-    check_commands
+    printf "Initializing...\n"  # Visible even without DEBUG
     
+    check_commands
+    log_debug "Commands checked"
+
     log_debug "Creating temporary directory"
     temp_dir=$(mktemp -d 2>/dev/null || mktemp -d -t 'archdl')
     cd "$temp_dir" || {
@@ -252,5 +256,7 @@ main() {
     fi
 }
 
-# Execute main
+# Execute main with explicit tracing
+log_debug "Before calling main"
+printf "Starting script...\n"  # Visible even without DEBUG
 main "$@"
