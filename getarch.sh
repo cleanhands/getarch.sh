@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
-# Revision: 12
-# Date: 2025-03-09
-# Description: Reverted cp -n to cp with checksum check to avoid unnecessary overwrites
+# Revision: 15
+# Date: 2025-03-10
+# Description: Fixed version fetching by eliminating pipeline and using temp_dir for all temp files
 
-# Enable modern bash features
-set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
-shopt -s inherit_errexit  # Inherit errexit in subshells (Bash 4.4+)
+set -euo pipefail
+shopt -s inherit_errexit
 
-# Define constants
 readonly download_page="https://archlinux.org/releng/releases/"
 readonly home_dir="${HOME:-$(/usr/bin/env printf '~')}"
 readonly downloads_dir="${XDG_DOWNLOAD_DIR:-${home_dir}/Downloads}"
 readonly cache_dir="${XDG_CACHE_HOME:-${home_dir}/.cache}/archlinux"
 
-# Colors for output (with cross-platform check)
 if [[ -t 1 ]] && command -v tput >/dev/null 2>&1; then
     red=$(tput setaf 1)
     green=$(tput setaf 2)
@@ -26,15 +23,13 @@ else
     reset=''
 fi
 
-# Debug logging function
 log_debug() {
     { [[ "${DEBUG:-}" == "true" || "${DEBUG:-}" == "1" ]] && printf "${yellow}[DEBUG] %s${reset}\n" "$@" >&2; } || :
 }
 
-# Cleanup function
 cleanup() {
     local exit_code=$?
-    if [[ -t 0 && ("${DEBUG:-}" == "true" || "${DEBUG:-}" == "1") ]]; then # Only prompt if interactive and debug is on
+    if [[ -t 0 && ("${DEBUG:-}" == "true" || "${DEBUG:-}" == "1") ]]; then
         printf "\nPress Enter to continue..." >&2
         read -r
     fi
@@ -42,7 +37,6 @@ cleanup() {
     exit "$exit_code"
 }
 
-# Check for required commands
 check_commands() {
     local cmd missing=()
     for cmd in curl aria2c sha256sum gpg mktemp dd; do
@@ -55,11 +49,9 @@ check_commands() {
     log_debug "All required commands found"
 }
 
-# List USB drives (works on Arch and macOS)
 list_usb_drives() {
     local drives=()
     if [[ "$(uname)" == "Darwin" ]]; then
-        # macOS: Include removable or external drives
         while IFS= read -r disk; do
             if [[ -n "$disk" ]]; then
                 local disk_info
@@ -70,7 +62,6 @@ list_usb_drives() {
             fi
         done < <(diskutil list | grep -oE 'disk[0-9]+' | sort -u)
     else
-        # Linux: Use lsblk to find removable block devices
         while IFS= read -r line; do
             local dev_name=$(echo "$line" | awk '{print $1}')
             if [[ -n "$dev_name" && -e "/sys/block/$dev_name/removable" ]] && [[ "$(cat "/sys/block/$dev_name/removable")" == "1" ]]; then
@@ -78,13 +69,11 @@ list_usb_drives() {
             fi
         done < <(lsblk -dno NAME | grep -v '^loop')
     fi
-    # Only output drives if there are any, avoiding empty lines
     if [[ ${#drives[@]} -gt 0 ]]; then
         printf '%s\n' "${drives[@]}"
     fi
 }
 
-# Get drive details
 get_drive_info() {
     local drive=$1
     if [[ "$(uname)" == "Darwin" ]]; then
@@ -94,7 +83,6 @@ get_drive_info() {
     fi
 }
 
-# Write ISO to drive
 write_to_drive() {
     local iso_path=$1 drive=$2
     if [[ "$(uname)" == "Darwin" ]]; then
@@ -115,10 +103,9 @@ write_to_drive() {
     printf "${green}Successfully wrote ISO to %s${reset}\n" "$drive"
 }
 
-# Main function
 main() {
     log_debug "Starting main function"
-    printf "Initializing...\n"  # Visible even without DEBUG
+    printf "Initializing...\n"
     check_commands
     log_debug "Commands checked"
     log_debug "Creating temporary directory"
@@ -130,12 +117,20 @@ main() {
     log_debug "Changed to temp directory: $temp_dir"
     local version torrent_url iso_name iso_path cached_iso
     log_debug "Fetching version from $download_page"
-    local version_output
-    if ! version_output=$(curl -s "$download_page"); then
+    local temp_file="$temp_dir/page_content.txt"
+    local versions_file="$temp_dir/versions.txt"
+    local sorted_versions_file="$temp_dir/sorted_versions.txt"
+    if ! curl -s "$download_page" > "$temp_file"; then
         printf "${red}Error: Failed to fetch download page${reset}\n" >&2
         exit 1
     fi
-    version=$(echo "$version_output" | grep -oE '[0-9]{4}\.[0-9]{2}\.[0-9]{2}' | head -n 1)
+    log_debug "Page content saved to $temp_file"
+    grep -oE '[0-9]{4}\.[0-9]{2}\.[0-9]{2}' "$temp_file" > "$versions_file" || {
+        printf "${red}Error: No versions found in page content${reset}\n" >&2
+        exit 1
+    }
+    sort -rV "$versions_file" > "$sorted_versions_file"
+    version=$(head -n 1 "$sorted_versions_file")
     if [[ -z "$version" ]]; then
         printf "${red}Error: Could not determine latest version${reset}\n" >&2
         exit 1
@@ -212,7 +207,6 @@ main() {
     }
     log_debug "ISO moved to $iso_path"
     mkdir -p "$cache_dir"
-    # Check if cached ISO exists and matches the downloaded one
     if [[ -f "$cached_iso" && "$(sha256sum "$cached_iso" | cut -d' ' -f1)" == "$(sha256sum "$iso_path" | cut -d' ' -f1)" ]]; then
         log_debug "Cached ISO at $cached_iso matches downloaded file, skipping copy"
     else
@@ -264,14 +258,12 @@ main() {
     fi
 }
 
-# Setup trap with explicit success check
 if ! trap cleanup EXIT INT TERM; then
     printf "${red}Error: Failed to set trap${reset}\n" >&2
     exit 1
 fi
 log_debug "Trap set successfully"
 
-# Execute main with explicit tracing
 log_debug "Before calling main"
-printf "Starting script...\n"  # Visible even without DEBUG
+printf "Starting script...\n"
 main "$@"
