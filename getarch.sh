@@ -49,6 +49,7 @@ check_commands() {
         printf "${red}Error: Missing required commands: %s${reset}\n" "${missing[*]}" >&2
         exit 1
     fi
+    log_debug "All required commands found"
 }
 
 # List USB drives (works on Arch and macOS)
@@ -105,20 +106,30 @@ write_to_drive() {
 
 # Main function
 main() {
+    log_debug "Starting main function"
     check_commands
     
+    log_debug "Creating temporary directory"
     temp_dir=$(mktemp -d 2>/dev/null || mktemp -d -t 'archdl')
     cd "$temp_dir" || {
         printf "${red}Error: Cannot change to temp directory${reset}\n" >&2
         exit 1
     }
+    log_debug "Changed to temp directory: $temp_dir"
 
     local version torrent_url iso_name iso_path cached_iso
-    version=$(curl -s "$download_page" | grep -oE '[0-9]{4}\.[0-9]{2}\.[0-9]{2}' | head -n 1)
+    log_debug "Fetching version from $download_page"
+    local version_output
+    if ! version_output=$(curl -s "$download_page"); then
+        printf "${red}Error: Failed to fetch download page${reset}\n" >&2
+        exit 1
+    fi
+    version=$(echo "$version_output" | grep -oE '[0-9]{4}\.[0-9]{2}\.[0-9]{2}' | head -n 1)
     if [[ -z "$version" ]]; then
         printf "${red}Error: Could not determine latest version${reset}\n" >&2
         exit 1
     fi
+    log_debug "Determined version: $version"
     
     torrent_url="https://archlinux.org/releng/releases/${version}/torrent/"
     iso_name="archlinux-${version}-x86_64.iso"
@@ -155,15 +166,29 @@ main() {
     log_debug "Checksum verified"
 
     printf "Fetching release key...\n"
-    gpg --auto-key-locate clear,wkd -v --locate-external-key pierre@archlinux.org ${DEBUG:+2>&1} || {
-        printf "${red}Error: Failed to fetch release key${reset}\n" >&2
-        exit 1
-    }
+    if [[ -n "${DEBUG:-}" ]]; then
+        gpg --auto-key-locate clear,wkd -v --locate-external-key pierre@archlinux.org || {
+            printf "${red}Error: Failed to fetch release key${reset}\n" >&2
+            exit 1
+        }
+    else
+        gpg --auto-key-locate clear,wkd -v --locate-external-key pierre@archlinux.org >/dev/null 2>&1 || {
+            printf "${red}Error: Failed to fetch release key${reset}\n" >&2
+            exit 1
+        }
+    fi
     
     printf "Verifying ISO signature...\n"
-    if ! gpg --keyserver-options auto-key-retrieve --verify "$iso_name.sig" "$iso_name" ${DEBUG:+2>&1}; then
-        printf "${red}Error: ISO signature verification failed!${reset}\n" >&2
-        exit 1
+    if [[ -n "${DEBUG:-}" ]]; then
+        gpg --keyserver-options auto-key-retrieve --verify "$iso_name.sig" "$iso_name" || {
+            printf "${red}Error: ISO signature verification failed!${reset}\n" >&2
+            exit 1
+        }
+    else
+        gpg --keyserver-options auto-key-retrieve --verify "$iso_name.sig" "$iso_name" >/dev/null 2>&1 || {
+            printf "${red}Error: ISO signature verification failed!${reset}\n" >&2
+            exit 1
+        }
     fi
     log_debug "Signature verified"
 
@@ -174,7 +199,6 @@ main() {
     }
     log_debug "ISO moved to $iso_path"
 
-    # Cache the ISO
     mkdir -p "$cache_dir"
     cp "$iso_path" "$cached_iso" || {
         printf "${red}Error: Failed to cache ISO${reset}\n" >&2
