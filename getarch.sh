@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
+# Revision: 1
+# Date: 2025-03-09
+# Description: Initial version with trap fix for early exit issue
 
 # Enable modern bash features
 set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
-# shopt -s inherit_errexit only works in Bash 4.4+, macOS has 3.2, so skip it safely
-shopt -s inherit_errexit 2>/dev/null || true
+shopt -s inherit_errexit  # Inherit errexit in subshells (Bash 4.4+)
 
 # Define constants
 readonly download_page="https://archlinux.org/releng/releases/"
@@ -36,9 +38,6 @@ cleanup() {
     [[ -d "${temp_dir:-}" ]] && rm -rf "$temp_dir"
     exit "$exit_code"
 }
-
-# Setup trap
-trap cleanup EXIT INT TERM
 
 # Check for required commands
 check_commands() {
@@ -255,6 +254,13 @@ main() {
         fi
     fi
 }
+
+# Setup trap with explicit success check
+if ! trap cleanup EXIT INT TERM; then
+    printf "${red}Error: Failed to set trap${reset}\n" >&2
+    exit 1
+fi
+log_debug "Trap set successfully"
 
 # Execute main with explicit tracing
 log_debug "Before calling main"
