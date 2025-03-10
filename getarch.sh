@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Revision: 3
+# Revision: 4
 # Date: 2025-03-09
-# Description: Fix aria2c to verify cached ISO without seeding
+# Description: Fix empty USB drive detection on macOS
 
 # Enable modern bash features
 set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
@@ -56,20 +56,26 @@ check_commands() {
 list_usb_drives() {
     local drives=()
     if [[ "$(uname)" == "Darwin" ]]; then
+        # macOS: Use diskutil to find removable drives
         while IFS= read -r disk; do
-            if diskutil info "$disk" | grep -q "Removable Media:.*Yes"; then
+            # Ensure disk is not empty and is removable
+            if [[ -n "$disk" ]] && diskutil info "$disk" | grep -q "Removable Media:.*Yes"; then
                 drives+=("$disk")
             fi
         done < <(diskutil list | grep -oE 'disk[0-9]+' | sort -u)
     else
+        # Linux: Use lsblk to find removable block devices
         while IFS= read -r line; do
             local dev_name=$(echo "$line" | awk '{print $1}')
-            if [[ -e "/sys/block/$dev_name/removable" ]] && [[ "$(cat "/sys/block/$dev_name/removable")" == "1" ]]; then
+            if [[ -n "$dev_name" && -e "/sys/block/$dev_name/removable" ]] && [[ "$(cat "/sys/block/$dev_name/removable")" == "1" ]]; then
                 drives+=("/dev/$dev_name")
             fi
         done < <(lsblk -dno NAME | grep -v '^loop')
     fi
-    printf '%s\n' "${drives[@]}"
+    # Only output drives if there are any, avoiding empty lines
+    if [[ ${#drives[@]} -gt 0 ]]; then
+        printf '%s\n' "${drives[@]}"
+    fi
 }
 
 # Get drive details
@@ -227,6 +233,7 @@ main() {
         if [[ "${response,,}" == "y" || "${response,,}" == "yes" ]]; then
             local drives
             mapfile -t drives < <(list_usb_drives)
+            log_debug "Detected ${#drives[@]} USB drives"
             if [[ ${#drives[@]} -eq 0 ]]; then
                 printf "${red}No USB drives detected${reset}\n"
                 return
