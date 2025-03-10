@@ -28,21 +28,21 @@ Install missing tools with your package manager (e.g., `brew` on macOS, `pacman`
 ## Usage
 1. **Clone the Repository**:
    ```bash
-   git clone https://github.com/yourusername/arch-iso-script.git
+   git clone https://github.com/cleanhands/getarch.sh.git
    cd arch-iso-script
    ```
 2. **Make Executable**:
    ```bash
-   chmod +x script.sh
+   chmod +x getarch.sh
    ```
 3. **Run the Script**:
    - Basic run:
      ```bash
-     ./script.sh
+     ./getarch.sh
      ```
    - With debug output:
      ```bash
-     DEBUG=1 ./script.sh
+     DEBUG=1 ./getarch.sh
      ```
 4. **Follow Prompts**:
    - The script downloads and verifies the ISO.
@@ -55,7 +55,7 @@ Install missing tools with your package manager (e.g., `brew` on macOS, `pacman`
 
 ## Example
 ```bash
-$ DEBUG=1 ./script.sh
+$ DEBUG=1 ./getarch.sh
 Starting script...
 Initializing...
 [DEBUG] Starting main function
@@ -81,7 +81,6 @@ Successfully wrote ISO to disk4
 ## Notes
 - **macOS Detection**: Detects USB drives based on "Removable Media: Removable" or "Device Location: External" from `diskutil`.
 - **Linux Detection**: Uses `lsblk` to find removable block devices.
-- **Current Revision**: 8 (as of 2025-03-09). See script comments for changelog.
 
 ## Contributing
 Feel free to open issues or submit pull requests for improvements, especially for edge cases in drive detection or additional features.
