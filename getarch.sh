@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Revision: 11
+# Revision: 12
 # Date: 2025-03-09
-# Description: Changed cp to cp -n to avoid overwriting cached ISO
+# Description: Reverted cp -n to cp with checksum check to avoid unnecessary overwrites
 
 # Enable modern bash features
 set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
@@ -212,11 +212,16 @@ main() {
     }
     log_debug "ISO moved to $iso_path"
     mkdir -p "$cache_dir"
-    cp -n "$iso_path" "$cached_iso" || {
-        printf "${red}Error: Failed to cache ISO${reset}\n" >&2
-        exit 1
-    }
-    log_debug "ISO cached at $cached_iso"
+    # Check if cached ISO exists and matches the downloaded one
+    if [[ -f "$cached_iso" && "$(sha256sum "$cached_iso" | cut -d' ' -f1)" == "$(sha256sum "$iso_path" | cut -d' ' -f1)" ]]; then
+        log_debug "Cached ISO at $cached_iso matches downloaded file, skipping copy"
+    else
+        cp "$iso_path" "$cached_iso" || {
+            printf "${red}Error: Failed to cache ISO${reset}\n" >&2
+            exit 1
+        }
+        log_debug "ISO cached at $cached_iso"
+    fi
     printf "${green}Successfully downloaded and verified %s${reset}\n" "$iso_name"
     if [[ -t 0 ]]; then
         printf "\nWould you like to write the ISO to a flash drive? (y/N): "
